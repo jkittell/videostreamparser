@@ -1,15 +1,20 @@
 services:
-  videostreamparser:
-    image: jpkitt/videostreamparser:latest
+  videostreamsegments:
+    image: jpkitt/videostreamsegments:latest
     environment:
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_EXCHANGE_NAME=${RABBITMQ_EXCHANGE_NAME}
+      - RABBITMQ_ROUTING_KEY=${RABBITMQ_ROUTING_KEY}
+      - RABBITMQ_QUEUE=${RABBITMQ_QUEUE}
       - MONGODB_HOST=${MONGODB_HOST}
       - MONGODB_PORT=${MONGODB_PORT}
       - MONGODB_NAME=${MONGODB_NAME}
-    ports:
-      - 80:80
+      - MONGODB_COLLECTION_NAME=${MONGODB_COLLECTION_NAME}
     restart: unless-stopped
     depends_on:
       mongodb:
+        condition: service_started
+      rabbitmq:
         condition: service_started
   mongodb:
     image: mongo:latest
@@ -17,6 +22,14 @@ services:
       - 27017:27017
     volumes:
       - mongodb_data:/data/db
+    restart: unless-stopped
+  rabbitmq:
+    image: 'rabbitmq:3.6-management-alpine'
+    ports:
+      # The standard AMQP protocol port
+      - 5672:5672
+      # HTTP management UI
+      - 15672:15672
     restart: unless-stopped
 volumes:
   mongodb_data:
