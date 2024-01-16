@@ -1,15 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
+	"encoding/gob"
 	"github.com/google/uuid"
-	"github.com/wagslane/go-rabbitmq"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -17,76 +14,106 @@ import (
 var url = "http://devimages.apple.com/iphone/samples/bipbop/bipbopall.m3u8"
 
 func TestSegments(t *testing.T) {
-	conn, err := rabbitmq.NewConn(
-		os.Getenv("RABBITMQ_URL"),
-		rabbitmq.WithConnectionOptionsLogging,
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
+	done := make(chan bool)
+	go request()
+	go response()
+	<-done
+}
+
+func request() {
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
-	publisher, err := rabbitmq.NewPublisher(
-		conn,
-		rabbitmq.WithPublisherOptionsLogging,
-		rabbitmq.WithPublisherOptionsExchangeName(os.Getenv("RABBITMQ_EXCHANGE_NAME")),
-		rabbitmq.WithPublisherOptionsExchangeDeclare,
+	ch, err := conn.Channel()
+	failOnError(err, "Failed to open a channel")
+	defer ch.Close()
+
+	q, err := ch.QueueDeclare(
+		"segments.request", // name
+		false,              // durable
+		false,              // delete when unused
+		false,              // exclusive
+		false,              // no-wait
+		nil,                // arguments
 	)
-	if err != nil {
-		log.Fatal(err)
+	failOnError(err, "Failed to declare a queue")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for range time.Tick(time.Second) {
+		payload := Payload{
+			Id:       uuid.New(),
+			URL:      url,
+			Segments: nil,
+		}
+		var buffer bytes.Buffer
+		encoder := gob.NewEncoder(&buffer)
+		if err := encoder.Encode(payload); err != nil {
+			log.Println(err)
+			continue
+		}
+		err = ch.PublishWithContext(ctx,
+			"",     // exchange
+			q.Name, // routing key
+			false,  // mandatory
+			false,  // immediate
+			amqp.Publishing{
+				ContentType: "application/x-gob",
+				Body:        buffer.Bytes(),
+			})
+		failOnError(err, "Failed to publish a message")
+		log.Printf("[<<] Sent %s\n", payload.Id.String())
 	}
-	defer publisher.Close()
 
-	publisher.NotifyReturn(func(r rabbitmq.Return) {
-		log.Printf("message returned from server: %s", string(r.Body))
-	})
+}
 
-	publisher.NotifyPublish(func(c rabbitmq.Confirmation) {
-		log.Printf("message confirmed from server. tag: %v, ack: %v", c.DeliveryTag, c.Ack)
-	})
+func response() {
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	failOnError(err, "Failed to connect to RabbitMQ")
+	defer conn.Close()
 
-	// block main thread - wait for shutdown signal
-	sigs := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
+	ch, err := conn.Channel()
+	failOnError(err, "Failed to open a channel")
+	defer ch.Close()
 
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	q, err := ch.QueueDeclare(
+		"segments.response", // name
+		false,               // durable
+		false,               // delete when unused
+		false,               // exclusive
+		false,               // no-wait
+		nil,                 // arguments
+	)
+	failOnError(err, "Failed to declare a queue")
+
+	messages, err := ch.Consume(
+		q.Name, // queue
+		"",     // consumer
+		true,   // auto-ack
+		false,  // exclusive
+		false,  // no-local
+		false,  // no-wait
+		nil,    // args
+	)
+	failOnError(err, "Failed to register a consumer")
+
+	done := make(chan bool)
 
 	go func() {
-		sig := <-sigs
-		fmt.Println()
-		fmt.Println(sig)
-		done <- true
+		for d := range messages {
+			dec := gob.NewDecoder(bytes.NewReader(d.Body))
+			var p Payload
+			err = dec.Decode(&p)
+			if err != nil {
+				log.Fatal("decode:", err)
+			}
+			log.Printf("[>>] Received: %s\n", p.Id.String())
+			segments, err := GetSegments(p.URL)
+			failOnError(err, "unable to get segments")
+			p.Segments = segments.ToSlice()
+		}
 	}()
 
-	fmt.Println("awaiting signal")
-
-	ticker := time.NewTicker(time.Second)
-	for {
-		select {
-		case <-ticker.C:
-			job := Job{
-				Id:  uuid.New(),
-				URL: url,
-			}
-			data, err := json.Marshal(job)
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = publisher.PublishWithContext(
-				context.Background(),
-				data,
-				[]string{os.Getenv("RABBITMQ_ROUTING_KEY")},
-				rabbitmq.WithPublishOptionsContentType("application/json"),
-				rabbitmq.WithPublishOptionsMandatory,
-				rabbitmq.WithPublishOptionsPersistentDelivery,
-				rabbitmq.WithPublishOptionsExchange(os.Getenv("RABBITMQ_EXCHANGE_NAME")),
-			)
-			if err != nil {
-				log.Println(err)
-			}
-		case <-done:
-			fmt.Println("stopping publisher")
-			return
-		}
-	}
+	<-done
 }
