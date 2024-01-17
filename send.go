@@ -21,12 +21,12 @@ func send(results chan Payload) {
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"segments.response", // name
-		false,               // durable
-		false,               // delete when unused
-		false,               // exclusive
-		false,               // no-wait
-		nil,                 // arguments
+		"q.segments.out", // name
+		true,             // durable
+		false,            // delete when unused
+		false,            // exclusive
+		false,            // no-wait
+		nil,              // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -36,7 +36,8 @@ func send(results chan Payload) {
 		var buffer bytes.Buffer
 		encoder := gob.NewEncoder(&buffer)
 		if err := encoder.Encode(res); err != nil {
-
+			log.Println(err)
+			continue
 		}
 		err = ch.PublishWithContext(ctx,
 			"",     // exchange

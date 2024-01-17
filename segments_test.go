@@ -30,12 +30,12 @@ func request() {
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"segments.request", // name
-		false,              // durable
-		false,              // delete when unused
-		false,              // exclusive
-		false,              // no-wait
-		nil,                // arguments
+		"q.segments.in", // name
+		true,            // durable
+		false,           // delete when unused
+		false,           // exclusive
+		false,           // no-wait
+		nil,             // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -78,19 +78,19 @@ func response() {
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"segments.response", // name
-		false,               // durable
-		false,               // delete when unused
-		false,               // exclusive
-		false,               // no-wait
-		nil,                 // arguments
+		"q.segments.out", // name
+		true,             // durable
+		false,            // delete when unused
+		false,            // exclusive
+		false,            // no-wait
+		nil,              // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
 	messages, err := ch.Consume(
 		q.Name, // queue
 		"",     // consumer
-		true,   // auto-ack
+		false,  // auto-ack
 		false,  // exclusive
 		false,  // no-local
 		false,  // no-wait
@@ -110,8 +110,13 @@ func response() {
 			}
 			log.Printf("[>>] Received: %s\n", p.Id.String())
 			segments, err := GetSegments(p.URL)
-			failOnError(err, "unable to get segments")
+			if err != nil {
+				log.Println(err)
+				d.Nack(false, true)
+			}
 			p.Segments = segments.ToSlice()
+			log.Printf("got %d segments for %s\n", len(p.Segments), p.Id)
+			d.Ack(false)
 		}
 	}()
 

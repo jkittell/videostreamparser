@@ -3,10 +3,9 @@ WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY *.go .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /videostreamparser
+RUN CGO_ENABLED=0 GOOS=linux go build -o /videostreamsegments
 
 FROM busybox
-COPY --from=builder /videostreamparser /home
-EXPOSE 80
+COPY --from=builder /videostreamsegments /home
 WORKDIR /home
-ENTRYPOINT [ "./videostreamparser" ]
+ENTRYPOINT [ "./videostreamsegments" ]
