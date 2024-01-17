@@ -47,7 +47,6 @@ func receive(results chan Payload) {
 			err = dec.Decode(&p)
 			if err != nil {
 				log.Printf("decode: %s\n", err.Error())
-				d.Nack(false, false)
 			}
 			log.Printf(" [>>] Received: %s\n", p.Id)
 			segments, err := GetSegments(p.URL)
