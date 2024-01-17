@@ -53,8 +53,6 @@ func receive(results chan Payload) {
 			segments, err := GetSegments(p.URL)
 			if err != nil {
 				log.Printf("unable to get segments: %s\n", p.Id)
-				d.Nack(false, true)
-				continue
 			}
 			p.Segments = segments.ToSlice()
 			results <- p
