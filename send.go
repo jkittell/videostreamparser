@@ -21,12 +21,12 @@ func send(results chan Payload) {
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"q.segments.out", // name
-		true,             // durable
-		false,            // delete when unused
-		false,            // exclusive
-		false,            // no-wait
-		nil,              // arguments
+		"q.segments.response", // name
+		false,                 // durable
+		false,                 // delete when unused
+		false,                 // exclusive
+		false,                 // no-wait
+		nil,                   // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -48,7 +48,9 @@ func send(results chan Payload) {
 				ContentType: "application/x-gob",
 				Body:        buffer.Bytes(),
 			})
-		failOnError(err, "Failed to publish a message")
-		log.Printf(" [<<] Sent: %+v\n", res.Id)
+		if err != nil {
+			log.Printf("[ %s ] failed to publish a message: %s", res.Id, err)
+		}
+		log.Printf("[ %s ] [<<] sent segments", res.Id)
 	}
 }

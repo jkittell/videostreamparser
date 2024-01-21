@@ -18,12 +18,12 @@ func receive(results chan Payload) {
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"q.segments.in", // name
-		true,            // durable
-		false,           // delete when unused
-		false,           // exclusive
-		false,           // no-wait
-		nil,             // arguments
+		"q.segments.request", // name
+		false,                // durable
+		false,                // delete when unused
+		false,                // exclusive
+		false,                // no-wait
+		nil,                  // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
@@ -46,12 +46,12 @@ func receive(results chan Payload) {
 			var p Payload
 			err = dec.Decode(&p)
 			if err != nil {
-				log.Printf("decode: %s\n", err.Error())
+				log.Printf("decode error: %s", err.Error())
 			}
-			log.Printf(" [>>] Received: %s\n", p.Id)
+			log.Printf("[ %s ] [>>] received request for segments", p.Id)
 			segments, err := GetSegments(p.URL)
 			if err != nil {
-				log.Printf("unable to get segments: %s\n", p.Id)
+				log.Printf("[ %s ] unable to get segments", p.Id)
 			}
 			p.Segments = segments.ToSlice()
 			results <- p

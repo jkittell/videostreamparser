@@ -173,11 +173,14 @@ func parseDASH(url string) (*structures.Array[Segment], error) {
 			}
 			manifestDuration = d
 		} else if *dashManifest.Type == "dynamic" {
-			d, err := dashManifest.TimeShiftBufferDepth.ToSeconds()
-			if err != nil {
-				return results, err
+			// 1/18/24 container was crashing because time shift buffer depth was not in dash ts manifest
+			if dashManifest.TimeShiftBufferDepth != nil {
+				d, err := dashManifest.TimeShiftBufferDepth.ToSeconds()
+				if err != nil {
+					return results, err
+				}
+				manifestDuration = d
 			}
-			manifestDuration = d
 		}
 	}
 
