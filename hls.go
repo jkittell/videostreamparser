@@ -151,7 +151,7 @@ func decodeMaster(url string) (map[string]string, error) {
 				if !strings.Contains(line, "http") {
 					streamURL = fmt.Sprintf("%s/%s", baseURL, URI)
 				} else {
-					streamURL = line
+					streamURL = URI
 				}
 				streams[URI] = streamURL
 			}
