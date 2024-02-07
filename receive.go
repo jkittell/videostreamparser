@@ -9,7 +9,9 @@ import (
 )
 
 func receive(results chan Payload) {
-	conn, err := amqp.Dial(os.Getenv("RABBITMQ_URL"))
+	url := os.Getenv("RABBITMQ_URL")
+	log.Printf("RABBITMQ_URL: %s", url)
+	conn, err := amqp.Dial(url)
 	failOnError(err, "Failed to connect to RabbitMQ")
 	defer conn.Close()
 
